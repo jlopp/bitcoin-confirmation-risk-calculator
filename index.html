@@ -77,11 +77,12 @@
 
       // Calculate risk curve for an attacker with hashrate % q, from 1 to 100 confirmations
       function plotRiskCurve(q) {
-        let riskCurve = array();
+        let riskCurve = [];
         for (let i = 1; i <= 100; i++) {
-          riskCurve.push(attackerSuccessProbability(q, i));
-          console.log(i + "," + attackerSuccessProbability(q, i));
+          riskCurve.push(attackerSuccessProbability(q, i) * 100).toFixed(2);
+          //console.log(i + "," + (attackerSuccessProbability(q, i) * 100).toFixed(2));
         }
+        return riskCurve;
       }
 
       function processForm() {
@@ -99,6 +100,19 @@
 
         let reorgRisk = attackerSuccessProbability(attackerHashPercent, waitConfirmations) * 100;
         document.getElementById('reorgRisk').innerHTML = reorgRisk.toFixed(2) + '%';
+
+        // calculate risk curve
+        let attackerPercent = document.getElementById('attackerHashrate').value / 100;
+        let riskData = plotRiskCurve(document.getElementById('attackerHashrate').value);
+        risk.y = [];
+        risk.x = [];
+        riskData.forEach((key, value) => {
+          risk.y.push(key);
+          risk.x.push(value + 1);
+        });
+
+        // Create chart
+        Plotly.newPlot('chart', [risk], layout, {responsive: true});
       }
     </script>
   </head>
@@ -139,6 +153,14 @@
           </div>
         </form>
       </div>
+    </div>
+    <div class="row">
+      <div class="col-md-12">
+        <div id="chart" class="plotly-graph-div" style="height:100%; width:100%;">
+        </div>
+      </div>
+    </div>
+    <div class="row">
       <hr/>
       <div class="col-md-12">
         <div>
@@ -171,6 +193,105 @@
       </div>
     </div>
     <script>
+      var layout = {
+
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+
+
+        // chart dimensions responsive, see CSS
+        // height: 700,
+        margin: { l: 50, r: 50, b: 45, t: 25, pad: 0 },
+
+
+        hovermode: 'closest',
+        showlegend: true,
+
+
+        legend: {
+          orientation: "h",
+          x: 0.5,
+          y: -0.05,
+          xanchor: "center",
+        },
+
+
+       // X-axis styling
+        xaxis: {
+
+          title:       'Number of Confirmations Elapsed',
+          range: [0,50],
+
+          showgrid: false,
+          autorange: false,
+
+          // vertical crosshair
+          showspikes:true,
+          spikemode:'across',
+          spikethickness:0.5,
+          spikecolor:'#333',
+          spikedash:'line',
+        },
+
+      // Y-axis styling
+        yaxis: {
+
+          title:       'Percent Chance of Reorganization',
+          hoverformat: '.4r',
+          titlefont: {
+              family: 'Open Sans, Arial',
+              weight: 500,
+              size: 12,
+              color: '#666'
+          },
+          tickfont: {
+            size:9,
+            color: '#666',
+          },
+          tickwidth: 5,
+          ticklen: 5,
+          tickcolor: '#999',
+          dtick: 10,
+
+          showgrid: false,
+
+          range: [0,100],
+
+          zeroline: false,
+
+          // horizontal crosshair
+          showspikes:true,
+          spikemode:'across',
+          spikethickness:0.5,
+          spikecolor:'#333',
+          spikedash:'line',
+        }
+      }
+
+      var risk = {
+         x: [],
+         y: [],
+         marker: {
+            opacity: 0
+         },
+         line: {
+            color:'',
+            width: 1,
+            dash: ''
+         },
+         opacity:0.75,
+            showlegend:true,
+
+         name:'Reorganization Risk',   hoverinfo:'name+y',
+
+         yaxis:'y',
+
+         hoverlabel: {
+            bordercolor:'#FFF',
+            font: { family: 'Open Sans, Arial', weight: 500, size: 10, },
+         },
+      }
+
       // populate form data
       getDominantMiner();
       processForm();
