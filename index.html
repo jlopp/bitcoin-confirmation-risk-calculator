@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
+    <!-- Bootstrap -->
+    <link href="css/bootstrap.min.css" rel="stylesheet">
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+    <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+    <title>Bitcoin Confirmation Risk Calculator</title>
+    <meta name="keywords" content="bitcoin, inflation" />
+    <meta name="Robots" content="index,follow" />
+    <meta name="description" content="Tracking the inflation rate of Bitcoin's money supply" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Bitcoinflation" />
+    <meta name="twitter:description" content="Tracking the inflation rate of Bitcoin's money supply." />
+    <meta name="twitter:image" content="" />
+
+    <script type="text/javascript">
+      window.PlotlyConfig = {MathJaxConfig: 'local'};
+    </script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script>
+      // get the latest mining pool distribution stats and find the dominant pool
+      function getDominantMiner() {
+        var Httpreq = new XMLHttpRequest(); // a new request
+        Httpreq.open("GET","https://api.blockchain.info/pools?timespan=7days",false);
+        Httpreq.send(null);
+        var json = JSON.parse(Httpreq.responseText);
+
+        let maxPool = "Unknown";
+        let maxBlocks = 0;
+        let sumBlocks = 0;
+        // sum up all of the blocks and find the % of blocks found by the largest pool
+        Object.entries(json).forEach(([key, value]) => {
+          if (value > maxBlocks) {
+            maxPool = key;
+            maxBlocks = value;
+          }
+          sumBlocks += value;
+        });
+
+        if (sumBlocks > 0) {
+          let poolPercent = ((maxBlocks / sumBlocks) * 100).toFixed(2);
+          document.getElementById('dominantMiner').innerHTML = maxPool + " which has " + poolPercent + "% of the global hashrate";
+          document.getElementById('attackerHashrate').value = poolPercent;
+        } else {
+          document.getElementById('dominantMiner').innerHTML = "The dominant pool is ~unknown~; assuming 20% of the global hashrate";
+          document.getElementById('attackerHashrate').value = 20;
+          console.log("Failed to get realtime pool stats from blockchain.info API");
+        }
+      }
+
+      // q = probability attacker finds the next block (% global hashrate)
+      // z = number of confirmations / blocks attacker needs to reorganize
+      function attackerSuccessProbability(q, z) {
+        // convert q from % [0 to 100] to a probability [0 to 1]
+        q = q / 100;
+        let p = 1.0 - q;
+        let lambda = z * (q / p);
+        let sum = 1.0;
+        for (let k = 0; k <= z; k++) {
+          let poisson = Math.exp(-lambda);
+          for (let i = 1; i <= k; i++)
+            poisson *= lambda / i;
+          sum -= poisson * (1 - Math.pow(q / p, z - k));
+        }
+        return sum;
+      }
+
+      // Calculate risk curve for an attacker with hashrate % q, from 1 to 100 confirmations
+      function plotRiskCurve(q) {
+        let riskCurve = array();
+        for (let i = 1; i <= 100; i++) {
+          riskCurve.push(attackerSuccessProbability(q, i));
+          console.log(i + "," + attackerSuccessProbability(q, i));
+        }
+      }
+
+      function processForm() {
+        var attackerHashPercent = parseInt(document.getElementById('attackerHashrate').value);
+        if (!Number.isInteger(attackerHashPercent) || attackerHashPercent < 0 || attackerHashPercent > 100) {
+          alert('expecting hashrate percent between 1 and 100, got: ' + attackerHashPercent);
+          return;
+        }
+
+        var waitConfirmations = parseInt(document.getElementById('confirmations').value);
+        if (!Number.isInteger(waitConfirmations) || waitConfirmations < 0 || waitConfirmations > 1000) {
+          alert('expecting confirmations between 1 and 1,000, got:' + waitConfirmations);
+          return;
+        }
+
+        let reorgRisk = attackerSuccessProbability(attackerHashPercent, waitConfirmations) * 100;
+        document.getElementById('reorgRisk').innerHTML = reorgRisk.toFixed(2) + '%';
+      }
+    </script>
+  </head>
+  <body>
+    <div class="container">
+    <h1 class="text-center">Bitcoin Confirmation Risk Calculator</h1>
+    <hr/>
+    <div class="row">
+      <div class="col-md-12">
+        <form role="form" action="javascript:void(0);">
+          <div>
+            <div class="col-sm-2">
+            </div>
+            <div class="col-sm-10">
+              <p>This calculator will give you a rough quantification of the risk that the current dominant mining pool with the most hashrate could reorganze the blockchain after a given number of transactions and thus make a payment cease to exist. The standard for high value payments is to wait for 6 confirmations, but it's not that simple! You can learn more about the calculation in <a href="https://blog.lopp.net">this article.</a></p>
+            </div>
+          </div>
+          <div>
+            <label class="col-sm-2"></label>
+            <div class="col-sm-10">
+              <div class="form-group row">
+                <h4>What percent of global hashrate does the potential attacker have?</h4>
+                <p>According to <a href="https://www.blockchain.com/explorer/charts/pools">blockchain.info</a>, the current dominant mining pool is <span style="color:red" id="dominantMiner"></span></p>
+                <label for="attackerHashrate" class="col-sm-4 col-form-label">Hashrate Percent</label>
+                <div class="col-sm-2">
+                  <input type="number" id="attackerHashrate" class="format form-control" value="20" maxlength="5" size="5" />
+                </div>
+              </div>
+              <div class="form-group row">
+                <label for="confirmations" class="col-sm-4 col-form-label">Confirmations</label>
+                <div class="col-sm-2">
+                  <input type="number" id="confirmations" class="format form-control" value="1" maxlength="5" size="5" />
+                </div>
+              </div>
+              <button class="btn btn-primary" onclick="processForm();return false;">Calculate</button><br/><br/><br/>
+              <h3>Reorganization risk: <span id="reorgRisk"></span></h3><br/>
+            </div>
+          </div>
+        </form>
+      </div>
+      <hr/>
+      <div class="col-md-12">
+        <div>
+          <hr/>
+          <div class="col-sm-2">
+          </div>
+          <div class="col-sm-10">
+            <h2>This tool is 100% open source code</h2>
+            <p>
+              <span>The Bitcoin Transaction Size Calculator repository can be found at </span>
+              <a href="https://github.com/jlopp/bitcoin-confirmation-risk-calculator" target="_blank">
+              https://github.com/jlopp/bitcoin-confirmation-risk-calculator
+              </a>
+            </p>
+            <h3>Libraries</h3>
+            <p>
+              <span>Plotly: </span>
+              <a href="https://plotly.com/" target="_blank">
+              https://plotly.com/
+              </a>
+            </p>
+            <p>
+              <span>Twitter Bootstrap: </span>
+              <a href="http://getbootstrap.com/" target="_blank">
+              http://getbootstrap.com/
+              </a>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      // populate form data
+      getDominantMiner();
+      processForm();
+    </script>
+  </body>
+</html>
