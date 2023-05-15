@@ -72,6 +72,9 @@
             poisson *= lambda / i;
           sum -= poisson * (1 - Math.pow(q / p, z - k));
         }
+        if (sum > 1) {
+          sum = 1;
+        }
         return sum;
       }
 
@@ -86,9 +89,9 @@
       }
 
       function processForm() {
-        var attackerHashPercent = parseInt(document.getElementById('attackerHashrate').value);
-        if (!Number.isInteger(attackerHashPercent) || attackerHashPercent < 0 || attackerHashPercent > 100) {
-          alert('expecting hashrate percent between 1 and 100, got: ' + attackerHashPercent);
+        var attackerHashPercent = parseFloat(document.getElementById('attackerHashrate').value);
+        if (typeof attackerHashPercent != 'number' || !isFinite(attackerHashPercent) || attackerHashPercent < 0 || attackerHashPercent > 100) {
+          alert('expecting hashrate percent between 0 and 100, got: ' + attackerHashPercent);
           return;
         }
 
