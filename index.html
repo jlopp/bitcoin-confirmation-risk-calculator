@@ -31,24 +31,23 @@
       // get the latest mining pool distribution stats and find the dominant pool
       function getDominantMiner() {
         var Httpreq = new XMLHttpRequest(); // a new request
-        Httpreq.open("GET","https://api.blockchain.info/pools?timespan=7days",false);
+        Httpreq.open("GET","https://mempool.space/api/v1/mining/hashrate/pools/1m",false);
         Httpreq.send(null);
         var json = JSON.parse(Httpreq.responseText);
 
         let maxPool = "Unknown";
-        let maxBlocks = 0;
-        let sumBlocks = 0;
-        // sum up all of the blocks and find the % of blocks found by the largest pool
-        Object.entries(json).forEach(([key, value]) => {
-          if (value > maxBlocks) {
-            maxPool = key;
-            maxBlocks = value;
+        let maxShare = 0;
+
+        // find the % of blocks found by the largest pool
+        json.forEach(function(obj) {
+          if (obj.share > maxShare) {
+            maxShare = obj.share;
+            maxPool = obj.poolName;
           }
-          sumBlocks += value;
         });
 
-        if (sumBlocks > 0) {
-          let poolPercent = ((maxBlocks / sumBlocks) * 100).toFixed(2);
+        if (maxShare > 0) {
+          let poolPercent = (maxShare * 100).toFixed(2);
           document.getElementById('dominantMiner').innerHTML = maxPool + " which has " + poolPercent + "% of the global hashrate";
           document.getElementById('attackerHashrate').value = poolPercent;
         } else {
@@ -70,10 +69,16 @@
           let poisson = Math.exp(-lambda);
           for (let i = 1; i <= k; i++)
             poisson *= lambda / i;
-          sum -= poisson * (1 - Math.pow(q / p, z - k));
+          let delta = poisson * (1 - Math.pow(q / p, z - k));
+          if (delta > 0) {
+            sum -= delta;
+          }
         }
         if (sum > 1) {
           sum = 1;
+        }
+        if (sum < 0) {
+          sum = 0;
         }
         return sum;
       }
@@ -81,9 +86,17 @@
       // Calculate risk curve for an attacker with hashrate % q, from 1 to 100 confirmations
       function plotRiskCurve(q) {
         let riskCurve = [];
-        for (let i = 1; i <= 100; i++) {
+        for (let i = 1; i <= 1000; i++) {
           riskCurve.push(attackerSuccessProbability(q, i) * 100).toFixed(2);
           //console.log(i + "," + (attackerSuccessProbability(q, i) * 100).toFixed(2));
+        }
+        // if a point on the risk curve is higher than the previous one, delete all future points
+        // because the algorithm has broken likely due to floating point math errors
+        for (let i = 1; i <= 1000; i++) {
+          if (riskCurve[i + 1] > riskCurve[i]) {
+            riskCurve = riskCurve.slice(0, i + 1);
+            break;
+          }
         }
         return riskCurve;
       }
@@ -130,7 +143,7 @@
             <div class="col-sm-2">
             </div>
             <div class="col-sm-10">
-              <p>This calculator will give you a rough quantification of the risk that the current dominant mining pool with the most hashrate could reorganize the blockchain after a given number of transactions and thus make a payment cease to exist. The standard for high value payments is to wait for 6 confirmations, but it's not that simple! You can learn more about the calculation in <a href="https://blog.lopp.net/how-many-bitcoin-confirmations-is-enough/">this article.</a></p>
+              <p>This calculator will give you a rough quantification of the risk that the current dominant mining pool with the most hashrate could reorganize the blockchain after a given number of confirmations and thus make a payment cease to exist. The standard for high value payments is to wait for 6 confirmations, but it's not that simple! You can learn more about the calculation in <a href="https://blog.lopp.net/how-many-bitcoin-confirmations-is-enough/">this article.</a></p>
             </div>
           </div>
           <div>
@@ -138,7 +151,7 @@
             <div class="col-sm-10">
               <div class="form-group row">
                 <h4>What percent of global hashrate does the potential attacker have?</h4>
-                <p>According to <a href="https://www.blockchain.com/explorer/charts/pools">blockchain.info</a>, the current dominant mining pool is <span style="color:red" id="dominantMiner"></span></p>
+                <p>According to <a href="https://mempool.space/mining">mempool.space</a>, the current dominant mining pool is <span style="color:red" id="dominantMiner"></span></p>
                 <label for="attackerHashrate" class="col-sm-4 col-form-label">Hashrate Percent</label>
                 <div class="col-sm-2">
                   <input type="number" id="attackerHashrate" class="format form-control" value="20" maxlength="5" size="5" />
@@ -223,7 +236,7 @@
         xaxis: {
 
           title:       'Number of Confirmations Elapsed',
-          range: [0,50],
+          range: [0,100],
 
           showgrid: false,
           autorange: false,
